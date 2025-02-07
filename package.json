@@ -1,0 +1,53 @@
+{
+  "name": "scope-navigator",
+  "displayName": "Scope Navigator",
+  "description": "Explore source by jumping to the top of a deeper scope, the top of a higher scope, or the top of the next/previous scope of the same depth.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "scope-navigator.descend",
+        "title": "Descend"
+      },
+      {
+        "command": "scope-navigator.ascend",
+        "title": "Ascend"
+      },
+      {
+        "command": "scope-navigator.next-branch",
+        "title": "NextBranch"
+      },
+      {
+        "command": "scope-navigator.previous-branch",
+        "title": "PreviousBranch"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.96.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.22.0",
+    "@typescript-eslint/parser": "^8.22.0",
+    "eslint": "^9.19.0",
+    "typescript": "^5.7.3",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
