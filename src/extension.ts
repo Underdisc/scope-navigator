@@ -1,73 +1,73 @@
 import * as vscode from 'vscode';
 
 type BraceInfo = {
-  text: string; offset: number; depth: number;
+  offset: number; depth: number; opening: boolean;
 };
 
-function GetBraceInfo(
+type CursorInfo = {
+  nextBrace: number; depth: number;
+};
+
+function GetMotionInfo(
     document: vscode.TextDocument,
-    cursorPosition: vscode.Position): [BraceInfo[], BraceInfo[]] {
-  // Acquire braces before the cursor. If the cursor is on a '}', it is exluded.
-  // A '{' is included.
-  const beforeStart = document.positionAt(0);
-  const cursorOffset = document.offsetAt(cursorPosition);
-  const text = document.getText();
-  let beforeEnd;
-  if (text.charAt(cursorOffset) == '}') {
-    beforeEnd = document.positionAt(cursorOffset);
-  } else {
-    beforeEnd = document.positionAt(cursorOffset + 1);
-  }
-  const beforeRange = new vscode.Range(beforeStart, beforeEnd);
-  const beforeText = document.getText(beforeRange);
-  const regex = /{|}/g
-  const beforeMatches = Array.from(beforeText.matchAll(regex));
-  const beforeMatchesReverse = Array.from(beforeMatches).reverse();
-  let beforeBraces: BraceInfo[] = [];
+    cursorPosition: vscode.Position): [BraceInfo[], CursorInfo] {
+  // Find all of the relevant braces contained in the file.
+  const regex = /{\n|^ *}/gm
+  const text = document.getText()
+  const matches = text.matchAll(regex);
   let depth = 0;
-  for (const match of beforeMatchesReverse) {
-    if (match[0] == '}') {
-      depth += 1;
+  let braces: BraceInfo[] = [];
+  for (const match of matches) {
+    let matchString = match[0];
+    let openIndex = matchString.indexOf('{');
+    let closeIndex = matchString.indexOf('}');
+    if (closeIndex != -1) {
+      const offset = match.index + closeIndex;
+      let newInfo: BraceInfo = {
+        offset: offset,
+        depth: depth,
+        opening: false,
+      };
+      braces.push(newInfo);
+      --depth;
     }
-    let newInfo:
-        BraceInfo = {text: match[0], offset: match.index, depth: depth};
-    beforeBraces.push(newInfo);
-    if (match[0] == '{') {
-      depth -= 1;
+    if (openIndex != -1) {
+      ++depth;
+      const offset = match.index + openIndex;
+      let newInfo: BraceInfo = {
+        offset: offset,
+        depth: depth,
+        opening: true,
+      };
+      braces.push(newInfo);
     }
   }
 
-  // Acquire braces after the cursor. If the cursor is on a '{', it is exluded.
-  // A '}' is included.
-  let afterBeginOffset;
-  if (text.charAt(cursorOffset) == '{') {
-    afterBeginOffset = cursorOffset + 1;
-  } else {
-    afterBeginOffset = cursorOffset;
+  // Find the cursor's location relative to the collected braces.
+  const cursorOffset = document.offsetAt(cursorPosition);
+  if (braces.length == 0 || cursorOffset < braces[0].offset) {
+    return [braces, {nextBrace: 0, depth: 0}];
   }
-  const afterBegin = document.positionAt(afterBeginOffset);
-  const afterEnd = document.positionAt(text.length)
-  const afterRange = new vscode.Range(afterBegin, afterEnd);
-  const afterText = document.getText(afterRange);
-  const afterMatches = afterText.matchAll(regex)
-  let afterBraces: BraceInfo[] = [];
-  depth = 0;
-  for (const matchIt of afterMatches) {
-    const match = matchIt;
-    if (match[0] == '{') {
-      depth += 1;
+  for (let i = 0; i < braces.length - 1; ++i) {
+    const brace = braces[i];
+    const nextBrace = braces[i + 1];
+    const afterBrace = (brace.opening && cursorOffset >= brace.offset) ||
+        (!brace.opening && cursorOffset > brace.offset);
+    const beforeNextBrace =
+        (nextBrace.opening && cursorOffset < nextBrace.offset) ||
+        (!nextBrace.opening && cursorOffset <= nextBrace.offset);
+    const between = afterBrace && beforeNextBrace;
+    if (!between) {
+      continue;
     }
-    let newInfo: BraceInfo = {
-      text: match[0],
-      offset: afterBeginOffset + match.index,
-      depth: depth
-    };
-    afterBraces.push(newInfo);
-    if (match[0] == '}') {
-      depth -= 1;
+    if (brace.opening) {
+      return [braces, {nextBrace: i + 1, depth: brace.depth}];
+    } else {
+      return [braces, {nextBrace: i + 1, depth: brace.depth - 1}];
     }
   }
-  return [beforeBraces, afterBraces];
+  const cursorInfo: CursorInfo = {nextBrace: braces.length, depth: 0};
+  return [braces, cursorInfo];
 }
 
 function SetCursorPosition(editor: vscode.TextEditor, offset: number) {
@@ -79,65 +79,64 @@ function SetCursorPosition(editor: vscode.TextEditor, offset: number) {
 }
 
 function Descend(
-    editor: vscode.TextEditor, beforeBraces: BraceInfo[],
-    afterBraces: BraceInfo[]) {
-  for (const brace of afterBraces) {
-    if (brace.depth == 0) {
-      return;
-    } else if (brace.depth == 1) {
-      SetCursorPosition(editor, brace.offset);
-      return;
+    editor: vscode.TextEditor, braces: BraceInfo[], cursorInfo: CursorInfo) {
+  if (cursorInfo.nextBrace < braces.length &&
+      braces[cursorInfo.nextBrace].depth > cursorInfo.depth) {
+    SetCursorPosition(editor, braces[cursorInfo.nextBrace].offset);
+    return;
+  }
+  for (let i = cursorInfo.nextBrace - 2; i >= 0; --i) {
+    const brace = braces[i];
+    if (brace.opening) {
+      if (brace.depth == cursorInfo.depth) {
+        return;
+      }
+      if (brace.depth == cursorInfo.depth + 1) {
+        SetCursorPosition(editor, brace.offset);
+        return;
+      }
     }
   }
+}
 
-  let nextDepthCount = 0;
-  for (const brace of beforeBraces) {
-    if (brace.depth == 0) {
-      return;
-    } else if (brace.depth == 1) {
-      ++nextDepthCount;
-    }
-    if (nextDepthCount == 2) {
+function Ascend(
+    editor: vscode.TextEditor, braces: BraceInfo[], cursorInfo: CursorInfo) {
+  for (let i = cursorInfo.nextBrace - 1; i >= 0; --i) {
+    const brace = braces[i];
+    if (brace.depth == cursorInfo.depth - 1 && brace.opening) {
       SetCursorPosition(editor, brace.offset);
       return;
     }
   }
 }
 
-function Ascend(editor: vscode.TextEditor, beforeBraces: BraceInfo[]) {
-  for (const brace of beforeBraces) {
-    if (brace.depth == -1) {
+function NextBranch(
+    editor: vscode.TextEditor, braces: BraceInfo[], cursorInfo: CursorInfo) {
+  for (let i = cursorInfo.nextBrace; i < braces.length; ++i) {
+    const brace = braces[i];
+    if (brace.depth < cursorInfo.depth) {
+      return;
+    }
+    if (brace.depth == cursorInfo.depth && brace.opening) {
       SetCursorPosition(editor, brace.offset);
       return;
     }
   }
 }
 
-function NextBranch(editor: vscode.TextEditor, afterBraces: BraceInfo[]) {
-  let currentDepthCount = 0;
-  for (const brace of afterBraces) {
-    if (brace.depth == -1) {
-      return;
-    } else if (brace.depth == 0) {
-      ++currentDepthCount;
-    }
-    if (currentDepthCount == 2) {
-      SetCursorPosition(editor, brace.offset);
+function PreviousBranch(
+    editor: vscode.TextEditor, braces: BraceInfo[], cursorInfo: CursorInfo) {
+  let currentScopeOpeningEcountered = false;
+  for (let i = cursorInfo.nextBrace - 1; i >= 0; --i) {
+    const brace = braces[i];
+    if (brace.depth < cursorInfo.depth) {
       return;
     }
-  }
-}
-
-
-function PreviousBranch(editor: vscode.TextEditor, beforeBraces: BraceInfo[]) {
-  let currentDepthCount = 0;
-  for (const brace of beforeBraces) {
-    if (brace.depth == -1) {
-      return;
-    } else if (brace.depth == 0) {
-      ++currentDepthCount;
-    }
-    if (currentDepthCount == 3) {
+    if (brace.depth == cursorInfo.depth && brace.opening) {
+      if (!currentScopeOpeningEcountered) {
+        currentScopeOpeningEcountered = true;
+        continue;
+      }
       SetCursorPosition(editor, brace.offset);
       return;
     }
@@ -158,19 +157,20 @@ function Explore(motion: Motion) {
   }
   const document = editor.document;
   const currentPosition = editor.selection.active;
-  const [beforeBraces, afterBraces] = GetBraceInfo(document, currentPosition);
+  const [braces, cursorInfo] = GetMotionInfo(document, currentPosition);
+  console.log(braces, cursorInfo);
   switch (motion) {
     case Motion.Descend:
-      Descend(editor, beforeBraces, afterBraces);
+      Descend(editor, braces, cursorInfo);
       break;
     case Motion.Ascend:
-      Ascend(editor, beforeBraces);
+      Ascend(editor, braces, cursorInfo);
       break;
     case Motion.NextBranch:
-      NextBranch(editor, afterBraces);
+      NextBranch(editor, braces, cursorInfo);
       break;
     case Motion.PreviousBranch:
-      PreviousBranch(editor, beforeBraces);
+      PreviousBranch(editor, braces, cursorInfo);
       break;
   }
 }
