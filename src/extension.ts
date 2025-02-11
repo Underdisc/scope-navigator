@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 type BraceInfo = {
-  offset: number; depth: number; opening: boolean;
+  offset: number; newCursorOffset: number; depth: number; opening: boolean;
 };
 
 type CursorInfo = {
@@ -25,6 +25,7 @@ function GetMotionInfo(
       const offset = match.index + closeIndex;
       let newInfo: BraceInfo = {
         offset: offset,
+        newCursorOffset: -1,
         depth: depth,
         opening: false,
       };
@@ -34,8 +35,20 @@ function GetMotionInfo(
     if (openIndex != -1) {
       ++depth;
       const offset = match.index + openIndex;
+
+      // Find next non-whitespace character after the opening brace for the new
+      // cursor position.
+      const endWhitespaceRegex = /\S/g;
+      endWhitespaceRegex.lastIndex = offset + 1;
+      const endWhitespaceMatch = endWhitespaceRegex.exec(text);
+      let newCursorOffset = -1;
+      if (endWhitespaceMatch) {
+        newCursorOffset = endWhitespaceMatch.index;
+      }
+
       let newInfo: BraceInfo = {
         offset: offset,
+        newCursorOffset: newCursorOffset,
         depth: depth,
         opening: true,
       };
@@ -70,8 +83,11 @@ function GetMotionInfo(
   return [braces, cursorInfo];
 }
 
-function SetCursorPosition(editor: vscode.TextEditor, offset: number) {
-  const bracePosition = editor.document.positionAt(offset);
+function SetCursorBrace(editor: vscode.TextEditor, brace: BraceInfo) {
+  if (brace.newCursorOffset == -1) {
+    return;
+  }
+  const bracePosition = editor.document.positionAt(brace.newCursorOffset);
   const newSelection = new vscode.Selection(bracePosition, bracePosition)
   editor.selection = newSelection;
   const range = new vscode.Range(bracePosition, bracePosition);
@@ -82,7 +98,7 @@ function Descend(
     editor: vscode.TextEditor, braces: BraceInfo[], cursorInfo: CursorInfo) {
   if (cursorInfo.nextBrace < braces.length &&
       braces[cursorInfo.nextBrace].depth > cursorInfo.depth) {
-    SetCursorPosition(editor, braces[cursorInfo.nextBrace].offset);
+    SetCursorBrace(editor, braces[cursorInfo.nextBrace]);
     return;
   }
   for (let i = cursorInfo.nextBrace - 2; i >= 0; --i) {
@@ -92,7 +108,7 @@ function Descend(
         return;
       }
       if (brace.depth == cursorInfo.depth + 1) {
-        SetCursorPosition(editor, brace.offset);
+        SetCursorBrace(editor, brace);
         return;
       }
     }
@@ -104,7 +120,7 @@ function Ascend(
   for (let i = cursorInfo.nextBrace - 1; i >= 0; --i) {
     const brace = braces[i];
     if (brace.depth == cursorInfo.depth - 1 && brace.opening) {
-      SetCursorPosition(editor, brace.offset);
+      SetCursorBrace(editor, brace);
       return;
     }
   }
@@ -118,7 +134,7 @@ function NextBranch(
       return;
     }
     if (brace.depth == cursorInfo.depth && brace.opening) {
-      SetCursorPosition(editor, brace.offset);
+      SetCursorBrace(editor, brace);
       return;
     }
   }
@@ -137,7 +153,7 @@ function PreviousBranch(
         currentScopeOpeningEcountered = true;
         continue;
       }
-      SetCursorPosition(editor, brace.offset);
+      SetCursorBrace(editor, brace);
       return;
     }
   }
@@ -158,7 +174,6 @@ function Explore(motion: Motion) {
   const document = editor.document;
   const currentPosition = editor.selection.active;
   const [braces, cursorInfo] = GetMotionInfo(document, currentPosition);
-  console.log(braces, cursorInfo);
   switch (motion) {
     case Motion.Descend:
       Descend(editor, braces, cursorInfo);
