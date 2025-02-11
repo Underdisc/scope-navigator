@@ -53,6 +53,8 @@ In each one of the examples below, a `c0` marks the cursor location before the c
 
 Here is a video of these motions in action. The hotkey bindings being used can be found in the [Extension Settings](#extension-settings) section.
 
+https://github.com/user-attachments/assets/109be152-1ee7-44d1-a5b0-7057947cb599
+
 ## Extension Settings
 Set your preferred hotkeys for the following commands. The defaults I am testing with are next to the command names.
 
