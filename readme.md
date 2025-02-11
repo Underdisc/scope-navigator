@@ -1,36 +1,15 @@
 # Scope Navigator
-
 Explore source by descending to the top of a deeper scope, ascending to the top of a higher scope, or hopping to the top of the next/previous scope of the same depth.
 
 ## Explanation
-
-These are vim-like motions that let you navigate the _scopes_ of a source file (specifically namespaces, structs, functions, control statements). The motions are descend, ascend, and hop to the next or previous branch. The following examples show this in action
+These are vim-like motions that let you navigate the _scopes_ of a source file (anything wrapped within `{\n` and `^ *}`). The motions are descend, ascend, and hop to the next or previous branch. The following examples show this in action
 
 In each one of the examples below, a `c0` marks the cursor location before the command and `c1` shows the cursor location after the command.
 
 ### Descend
-
 ```cpp
 {
-  //...
-  {
-    //...
-  }
   c0
-  {
-    c1
-  }
-  //...
-}
-```
-
-```cpp
-{
-  //...
-  {
-    //...
-  }
-  //...
   {
     c1
   }
@@ -39,25 +18,9 @@ In each one of the examples below, a `c0` marks the cursor location before the c
 ```
 
 ### Ascend
-
 ```cpp
 {
   c1
-  {
-    c0
-  }
-  {
-    //...
-  }
-}
-```
-
-```cpp
-{
-  c1
-  {
-    //...
-  }
   {
     c0
   }
@@ -65,12 +28,8 @@ In each one of the examples below, a `c0` marks the cursor location before the c
 ```
 
 ### Next Branch
-
 ```cpp
 {
-  {
-    //...
-  }
   {
     c0
   }
@@ -81,7 +40,6 @@ In each one of the examples below, a `c0` marks the cursor location before the c
 ```
 
 ### Previous Branch
-
 ```cpp
 {
   {
@@ -90,15 +48,13 @@ In each one of the examples below, a `c0` marks the cursor location before the c
   {
     c0
   }
-  {
-    //...
-  }
 }
 ```
 
-## Extension Settings
+Here is a video of these motions in action. The hotkey bindings being used can be found in the [Extension Settings](#extension-settings) section.
 
-Set your preferred hotkeys for the following commands. My testing default are next to the setting names.
+## Extension Settings
+Set your preferred hotkeys for the following commands. The defaults I am testing with are next to the command names.
 
 * `scope-navigator.descend` - `Ctrl+l`
 * `scope-navigator.ascend` - `Ctrl+h`
@@ -106,5 +62,4 @@ Set your preferred hotkeys for the following commands. My testing default are ne
 * `scope-navigator.previousBranch` - `Ctrl+k`
 
 ## Deficiencies
-
-This is purely text based, so it will only work with languages that use braces for defining scopes. This also means usages of braces that define things other than scopes will interfere with the intention of these commands. If I conclude that these motions are beneficial enough, I will look into making a solution that is more robust.
+This is purely text based, so its use case is limited to code that uses opening braces at the end of a line and closing braces at the start of a line. Braces that fall under these conditions and are found within comments are included. The implementation could also be a lot better.
